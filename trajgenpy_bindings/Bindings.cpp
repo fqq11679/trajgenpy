@@ -64,8 +64,8 @@ py::list generate_sweeps(const Polygon_2 &poly, const double sweep_offset = 50.0
         // // Traverse through all polygons
         std::vector<std::vector<Segment_2>> sweeps;
         // TODO Reuse the directions from the polygon decomposition for performance optimisation
-        Direction_2 bestDir;
-        polygon_coverage_planning::findBestSweepDir(poly, &bestDir);
+        Direction_2 bestDir(0, 1);
+        //polygon_coverage_planning::findBestSweepDir(poly, &bestDir);
 
         // Construct the sweep plan
         std::vector<Segment_2> sweep;

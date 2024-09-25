@@ -60,10 +60,11 @@ def custom_example():
     hole.set_crs("EPSG:3857")
 
     polygon_list = Geometries.decompose_polygon(
-        geo_poly.get_geometry(), obstacles=hole.get_geometry()
+        geo_poly.get_geometry()#, obstacles=hole.get_geometry()
     )
 
     offset = Geometries.get_sweep_offset(0.1, 30, 100)
+    print(offset)
     result = []
     for decomposed_poly in polygon_list:
         sweeps_connected = Geometries.generate_sweep_pattern(
@@ -72,7 +73,7 @@ def custom_example():
         assert len(sweeps_connected) == 1
 
         sweeps_disconnected = Geometries.generate_sweep_pattern(
-            decomposed_poly, offset, clockwise=False, connect_sweeps=False
+            decomposed_poly, offset, clockwise=False, connect_sweeps=True
         )
 
         # Plotting
@@ -94,11 +95,17 @@ def custom_example():
     # multi_traj.set_crs("WGS84")
     # geo_poly.set_crs("WGS84")
     # hole.set_crs("WGS84")
-    geo_poly.plot(facecolor="grey", edgecolor="black", linewidth=2, alpha=0.4)
-    hole.plot(facecolor="red", edgecolor="red", linewidth=2, alpha=0.2)
+    geo_poly.plot(facecolor="grey", linewidth=2, alpha=0.4)
+    
+    #for decomposed_poly in polygon_list:
+    #    d_poly = Geometries.GeoPolygon(decomposed_poly)
+    #    d_poly.plot(facecolor="grey", edgecolor="green",linewidth=2, alpha=0.4)
+    
+    #hole.plot(facecolor="red", edgecolor="red", linewidth=2, alpha=0.2)
     multi_traj.plot(color="black", linewidth=1)
     plt.axis("equal")
     plt.axis("off")
+    plt.savefig("output.png", dpi=300)
     plt.show()
 
 
