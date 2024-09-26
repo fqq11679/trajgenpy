@@ -102,6 +102,7 @@ def custom_example():
     #    d_poly.plot(facecolor="grey", edgecolor="green",linewidth=2, alpha=0.4)
     
     #hole.plot(facecolor="red", edgecolor="red", linewidth=2, alpha=0.2)
+    multi_traj.concatenate_trajectories(geo_poly.get_geometry())
     multi_traj.plot(color="black", linewidth=1)
     plt.axis("equal")
     plt.axis("off")

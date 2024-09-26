@@ -111,13 +111,24 @@ class GeoMultiTrajectory(GeoData):
             self.is_geometry_of_type(geometry, shapely.MultiLineString)
             super().__init__(geometry, crs)
 
+    def concatenate_trajectories(self, geo_poly):
+        concatenated_line = shapely.geometry.LineString(
+            [pt for line in self.geometry.geoms for pt in list(line.coords)]
+        )
+        self.geometry = concatenated_line
+
     def plot(self, ax=None, add_points=False, color=None, linewidth=2, **kwargs):
         if self.crs == "WGS84":
             log.warning(
                 "Plotting in WGS84 is not recomended as this distorts the geometry!"
             )
-        for line in self.geometry.geoms:
-            shplt.plot_line(line, ax, add_points, color, linewidth, **kwargs)
+        if isinstance(self.geometry, shapely.MultiLineString):
+            for line in self.geometry.geoms:
+                shplt.plot_line(line, ax, add_points, color, linewidth, **kwargs)
+        elif isinstance(self.geometry, shapely.geometry.LineString):
+            shplt.plot_line(self.geometry, ax, add_points, color, linewidth, **kwargs)
+        else:
+            raise ValueError("Geometry is neither MultiLineString or LineString.")
 
     def _convert_to_crs(self, crs):
         transformer = pyproj.Transformer.from_crs(self.crs, crs, always_xy=True)
