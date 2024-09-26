@@ -9,6 +9,8 @@ import random
 import trajgenpy.bindings as bindings
 from trajgenpy import Logging
 
+import itertools
+
 log = Logging.get_logger()
 
 
@@ -112,10 +114,19 @@ class GeoMultiTrajectory(GeoData):
             super().__init__(geometry, crs)
 
     def concatenate_trajectories(self, geo_poly):
-        concatenated_line = shapely.geometry.LineString(
-            [pt for line in self.geometry.geoms for pt in list(line.coords)]
-        )
-        self.geometry = concatenated_line
+        min_solution = None
+        best_line = None
+
+        permutations = list(itertools.permutations(self.geometry.geoms))
+        for p in permutations:
+            concatenated_line = shapely.geometry.LineString(
+                [pt for line in p for pt in list(line.coords)]
+            )
+            if min_solution is None or concatenated_line.length < min_solution:
+                min_solution = concatenated_line.length
+                best_line = concatenated_line
+
+        self.geometry = best_line
 
     def plot(self, ax=None, add_points=False, color=None, linewidth=2, **kwargs):
         if self.crs == "WGS84":
