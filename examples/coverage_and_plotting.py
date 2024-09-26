@@ -5,6 +5,7 @@ import shapely.plotting as shplt
 from matplotlib import pyplot as plt
 from trajgenpy import Geometries, Logging
 import geojson
+import numpy as np
 
 log = Logging.get_logger()
 
@@ -40,6 +41,67 @@ def custom_example():
             [10.470650724002098, 55.38520996875883],
         ]
     )
+
+
+    #----------------------------------测试数据----------------------------
+    def transform_points(ox, oy, polygon):
+        # Calculate the min and max of the original polygon's x (lon) and y (lat) coords
+        poly_x = [point[0] for point in polygon.exterior.coords]
+        poly_y = [point[1] for point in polygon.exterior.coords]
+        poly_x_min, poly_x_max = min(poly_x), max(poly_x)
+        poly_y_min, poly_y_max = min(poly_y), max(poly_y)
+
+        # Calculate the min and max of the ox and oy coords
+        ox_min, ox_max = min(ox), max(ox)
+        oy_min, oy_max = min(oy), max(oy)
+
+        # Transform the ox and oy values to the new coordinate system
+        transformed_ox = [np.interp(x, (ox_min, ox_max), (poly_x_min, poly_x_max)) for x in ox]
+        transformed_oy = [np.interp(y, (oy_min, oy_max), (poly_y_min, poly_y_max)) for y in oy]
+
+        # Create a list of tuples from the transformed coordinates
+        transformed_points = list(zip(transformed_ox, transformed_oy))
+    
+        # Create a new Polygon object from the transformed coordinates
+        transformed_polygon = shapely.Polygon(transformed_points)
+
+        return transformed_polygon
+
+    # Use the defined function to transform the ox and oy lists and create a new polygon
+    
+    #case1
+    #ox = [0.0, 20.0, 50.0, 100.0, 130.0, 40.0, 0.0]
+    #oy = [0.0, -20.0, 0.0, 30.0, 60.0, 80.0, 0.0]
+
+    #case2
+    #ox = [0.0, 20.0, 50.0, 100.0, 130.0, 40.0, 0.0]
+    #oy = [0.0, -20.0, 0.0, 0.0, 60.0, 80.0, 0.0]
+   
+    #case3
+    #ox = [0.0, 50.0, 50.0, 0.0, 0.0]
+    #oy = [0.0, 0.0, 30.0, 30.0, 0.0]
+
+    #case4
+    #ox = [0.0, 20.0, 50.0, 200.0, 130.0, 40.0, 0.0]
+    #oy = [0.0, -80.0, 0.0, 30.0, 60.0, 80.0, 0.0]
+
+    #case5
+    #ox = [0.0, 200.0, 200.0, 100.0, 0.0, 0.0]
+    #oy = [0.0, 0.0, 200.0, 20.0, 200.0, 0.0]
+
+    #case6
+    #ox = [50, 100, 150, 160, 100, 50, 30, 30, 50]
+    #oy = [50, 30, 50, 100, 150, 160, 150, 50, 50]
+
+    #case7
+    ox = [50, 100, 150, 160, 100, 50, 30, 30, 50]
+    oy = [50, 30, 50, 100, 150, 160, 150, 50, 50]
+    ox = ox[::-1] # 反转列表
+    oy = oy[::-1]
+
+    transformed_polygon = transform_points(ox, oy, poly)
+    poly = transformed_polygon
+    #-----------------------------------------------------------------------
 
     geo_poly = Geometries.GeoPolygon(poly)
     geo_poly.set_crs("EPSG:3857")
