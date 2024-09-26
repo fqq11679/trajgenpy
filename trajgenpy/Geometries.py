@@ -10,6 +10,7 @@ import trajgenpy.bindings as bindings
 from trajgenpy import Logging
 
 import itertools
+import networkx as nx
 
 log = Logging.get_logger()
 
@@ -113,15 +114,43 @@ class GeoMultiTrajectory(GeoData):
             self.is_geometry_of_type(geometry, shapely.MultiLineString)
             super().__init__(geometry, crs)
 
+    def connect(self, polygon, point1, point2):
+        vertices = list(polygon.exterior.coords)[0:-1]
+        all_points = vertices + [point1, point2]
+        
+        G = nx.Graph()
+        
+        for i in range(len(all_points)):
+            for j in range(i+1, len(all_points)):
+                line = shapely.geometry.LineString([all_points[i], all_points[j]])
+                if polygon.buffer(0.001).contains(line):
+                    G.add_edge(i, j, weight=line.length)
+        
+        point1_index = all_points.index(point1)
+        point2_index = all_points.index(point2)
+        
+        path = nx.dijkstra_path(G, source=point1_index, target=point2_index, weight='weight')
+        inter_points = [all_points[i] for i in path]
+
+        return inter_points
+
     def concatenate_trajectories(self, geo_poly):
         min_solution = None
         best_line = None
 
         permutations = list(itertools.permutations(self.geometry.geoms))
+        
         for p in permutations:
-            concatenated_line = shapely.geometry.LineString(
-                [pt for line in p for pt in list(line.coords)]
-            )
+            traj_list = []
+            for i in range(len(p)):
+                line = p[i]
+                if i > 0:
+                    point1 = traj_list[-1]
+                    point2 = list(line.coords)[0]
+                    traj_list += self.connect(geo_poly, point1, point2) #TODO去头尾
+                traj_list += list(line.coords)
+            concatenated_line = shapely.geometry.LineString(traj_list)
+
             if min_solution is None or concatenated_line.length < min_solution:
                 min_solution = concatenated_line.length
                 best_line = concatenated_line
