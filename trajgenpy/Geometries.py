@@ -12,6 +12,8 @@ from trajgenpy import Logging
 import itertools
 import networkx as nx
 
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+
 log = Logging.get_logger()
 
 
@@ -134,38 +136,70 @@ class GeoMultiTrajectory(GeoData):
 
         return inter_points
 
-    def concatenate_trajectories(self, geo_poly):
-        traj_list = []
-        used_geoms = set()
-
-        while len(used_geoms) < len(self.geometry.geoms):
-            best_extension = None
-            best_geom = None
-
-            for line in self.geometry.geoms:
-                if line not in used_geoms:
-                    if not traj_list:
-                        best_extension = list(line.coords)
-                        best_geom = line
+    def create_distance_matrix(self, geoms, polygon):
+        distance_matrix = []
+        for i in range(len(geoms)):
+            row = []
+            for j in range(len(geoms)):
+                if i == j:
+                    row.append(0)
+                else:
+                    point1 = list(geoms[i].coords)[-1]  # Last point of geom[i]
+                    point2 = list(geoms[j].coords)[0]    # First point of geom[j]
+                    path = self.connect(polygon, point1, point2)
+                    if len(path) < 2:
+                        row.append(0)
                     else:
-                        point1 = traj_list[-1]
-                        point2 = list(line.coords)[0]
-                        new_traj = self.connect(geo_poly, point1, point2)
-                        total_traj = traj_list + new_traj + list(line.coords)
+                        distance = shapely.geometry.LineString(path).length
+                        row.append(distance)
+            distance_matrix.append(row)
+        return distance_matrix
 
-                        current_length = shapely.geometry.LineString(total_traj).length
-                        if best_extension is None or current_length < best_length:
-                            best_extension = total_traj
-                            best_geom = line
-                            best_length = current_length
+    def tsp_solution(self, geoms, polygon):
+        distance_matrix = self.create_distance_matrix(geoms, polygon)
+        manager = pywrapcp.RoutingIndexManager(len(distance_matrix), 1, 0)
+        routing = pywrapcp.RoutingModel(manager)
 
-            if best_geom is not None:
-                traj_list = best_extension
-                used_geoms.add(best_geom)
+        def distance_callback(from_index, to_index):
+            return distance_matrix[manager.IndexToNode(from_index)][manager.IndexToNode(to_index)]
 
-        self.geometry = shapely.geometry.LineString(traj_list)
+        transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+        routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
+        search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+        search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
 
+        solution = routing.SolveWithParameters(search_parameters)
+
+        if solution:
+            traj_list = []
+            index = routing.Start(0)
+            while not routing.IsEnd(index):
+                current_geom = geoms[manager.IndexToNode(index)]
+                traj_list.extend(list(current_geom.coords))
+        
+                next_index = solution.Value(routing.NextVar(index))
+                if not routing.IsEnd(next_index):
+                    next_geom = geoms[manager.IndexToNode(next_index)]
+                    point1 = list(current_geom.coords)[-1]  # Last point of current geometry
+                    point2 = list(next_geom.coords)[0]      # First point of next geometry
+            
+                    # Insert points from the connect function
+                    connecting_points = self.connect(polygon, point1, point2)
+                    traj_list.extend(connecting_points)  # Add connecting points
+        
+                index = next_index
+
+            # Create the final LineString from the trajectory list
+            return shapely.geometry.LineString(traj_list)
+        else:
+            return None
+
+    # Example usage:
+    # result_geometry = tsp_solution(self.geometry.geoms, polygon)
+
+    def concatenate_trajectories(self, geo_poly):
+        self.geometry = self.tsp_solution(self.geometry.geoms, geo_poly)
 
     def plot(self, ax=None, add_points=False, color=None, linewidth=2, **kwargs):
         if self.crs == "WGS84":
