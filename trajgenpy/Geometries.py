@@ -142,16 +142,30 @@ class GeoMultiTrajectory(GeoData):
             row = []
             for j in range(len(geoms)):
                 if i == j:
-                    row.append(0)
+                    row.append([0, 0, 0, 0])  # 四种距离，均为0
                 else:
-                    point1 = list(geoms[i].coords)[-1]  # Last point of geom[i]
-                    point2 = list(geoms[j].coords)[0]    # First point of geom[j]
-                    path = self.connect(polygon, point1, point2)
-                    if len(path) < 2:
-                        row.append(0)
-                    else:
-                        distance = shapely.geometry.LineString(path).length
-                        row.append(distance)
+                    # 计算四种距离
+                    distances = []
+                    for var1 in [0, 1]:  # 轨迹1的方向
+                        for var2 in [0, 1]:  # 轨迹2的方向
+                            if var1 == 0:
+                                path1 = list(geoms[i].coords)
+                            else:
+                                path1 = list(reversed(geoms[i].coords))
+
+                            if var2 == 0:
+                                path2 = list(geoms[j].coords)
+                            else:
+                                path2 = list(reversed(geoms[j].coords))
+
+                            # 连接路径并计算距离
+                            path = self.connect(polygon, path1[-1], path2[0])
+                            if len(path) < 2:
+                                distance = 0
+                            else:
+                                distance = shapely.geometry.LineString(path).length
+                            distances.append(distance)
+                    row.append(distances)
             distance_matrix.append(row)
         return distance_matrix
 
@@ -160,8 +174,14 @@ class GeoMultiTrajectory(GeoData):
         manager = pywrapcp.RoutingIndexManager(len(distance_matrix), 1, 0)
         routing = pywrapcp.RoutingModel(manager)
 
+        var_indices = []
+        for i in range(len(geoms)):
+            var_indices.append(routing.RegisterUnaryTransitCallback(lambda index, i=i: 0 if index == i else 1))
+
         def distance_callback(from_index, to_index):
-            return distance_matrix[manager.IndexToNode(from_index)][manager.IndexToNode(to_index)]
+            from_var_value = var_indices[manager.IndexToNode(from_index)]
+            to_var_value = var_indices[manager.IndexToNode(to_index)]
+            return distance_matrix[manager.IndexToNode(from_index)][manager.IndexToNode(to_index)][from_var_value * 2 + to_var_value]
 
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
@@ -176,21 +196,27 @@ class GeoMultiTrajectory(GeoData):
             index = routing.Start(0)
             while not routing.IsEnd(index):
                 current_geom = geoms[manager.IndexToNode(index)]
-                traj_list.extend(list(current_geom.coords))
-        
+                coords = list(current_geom.coords)
+                var_value = var_indices[manager.IndexToNode(index)]
+                if var_value:
+                    coords = coords[::-1]
+                traj_list.extend(coords)
+
                 next_index = solution.Value(routing.NextVar(index))
                 if not routing.IsEnd(next_index):
                     next_geom = geoms[manager.IndexToNode(next_index)]
-                    point1 = list(current_geom.coords)[-1]  # Last point of current geometry
-                    point2 = list(next_geom.coords)[0]      # First point of next geometry
-            
-                    # Insert points from the connect function
+                    next_coords = list(next_geom.coords)
+                    next_var_value = var_indices[manager.IndexToNode(next_index)]
+                    if next_var_value:
+                        next_coords = next_coords[::-1]
+
+                    point1 = coords[-1]  # Last point of current geometry
+                    point2 = next_coords[0]  # First point of next geometry
                     connecting_points = self.connect(polygon, point1, point2)
-                    traj_list.extend(connecting_points)  # Add connecting points
-        
+                    traj_list.extend(connecting_points)
+
                 index = next_index
 
-            # Create the final LineString from the trajectory list
             return shapely.geometry.LineString(traj_list)
         else:
             return None
