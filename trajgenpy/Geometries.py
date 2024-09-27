@@ -117,7 +117,7 @@ class GeoMultiTrajectory(GeoData):
     def connect(self, polygon, point1, point2):
         vertices = list(polygon.exterior.coords)[0:-1]
         all_points = vertices + [point1, point2]
-        
+
         G = nx.Graph()
         
         for i in range(len(all_points)):
@@ -135,27 +135,37 @@ class GeoMultiTrajectory(GeoData):
         return inter_points
 
     def concatenate_trajectories(self, geo_poly):
-        min_solution = None
-        best_line = None
+        traj_list = []
+        used_geoms = set()
 
-        permutations = list(itertools.permutations(self.geometry.geoms))
-        
-        for p in permutations:
-            traj_list = []
-            for i in range(len(p)):
-                line = p[i]
-                if i > 0:
-                    point1 = traj_list[-1]
-                    point2 = list(line.coords)[0]
-                    traj_list += self.connect(geo_poly, point1, point2) #TODO去头尾
-                traj_list += list(line.coords)
-            concatenated_line = shapely.geometry.LineString(traj_list)
+        while len(used_geoms) < len(self.geometry.geoms):
+            best_extension = None
+            best_geom = None
 
-            if min_solution is None or concatenated_line.length < min_solution:
-                min_solution = concatenated_line.length
-                best_line = concatenated_line
+            for line in self.geometry.geoms:
+                if line not in used_geoms:
+                    if not traj_list:
+                        best_extension = list(line.coords)
+                        best_geom = line
+                    else:
+                        point1 = traj_list[-1]
+                        point2 = list(line.coords)[0]
+                        new_traj = self.connect(geo_poly, point1, point2)
+                        total_traj = traj_list + new_traj + list(line.coords)
 
-        self.geometry = best_line
+                        current_length = shapely.geometry.LineString(total_traj).length
+                        if best_extension is None or current_length < best_length:
+                            best_extension = total_traj
+                            best_geom = line
+                            best_length = current_length
+
+            if best_geom is not None:
+                traj_list = best_extension
+                used_geoms.add(best_geom)
+
+        self.geometry = shapely.geometry.LineString(traj_list)
+
+
 
     def plot(self, ax=None, add_points=False, color=None, linewidth=2, **kwargs):
         if self.crs == "WGS84":

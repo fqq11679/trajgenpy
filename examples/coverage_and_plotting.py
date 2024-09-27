@@ -2,6 +2,8 @@ import logging
 
 import shapely
 import shapely.plotting as shplt
+from shapely.affinity import rotate
+
 from matplotlib import pyplot as plt
 from trajgenpy import Geometries, Logging
 import geojson
@@ -94,17 +96,23 @@ def custom_example():
     #oy = [50, 30, 50, 100, 150, 160, 150, 50, 50]
 
     #case7
-    ox = [50, 100, 150, 160, 100, 50, 30, 30, 50]
-    oy = [50, 30, 50, 100, 150, 160, 150, 50, 50]
-    ox = ox[::-1] # 反转列表
-    oy = oy[::-1]
+    #ox = [50, 100, 150, 160, 100, 50, 30, 30, 50]
+    #oy = [50, 30, 50, 100, 150, 160, 150, 50, 50]
+    #ox = ox[::-1] # 反转列表
+    #oy = oy[::-1]
 
-    transformed_polygon = transform_points(ox, oy, poly)
-    poly = transformed_polygon
+    #transformed_polygon = transform_points(ox, oy, poly)
+    #poly = transformed_polygon
+    #-----------------------------------------------------------------------
+    # 设置旋转角
+    alpha = 45
+
     #-----------------------------------------------------------------------
 
     geo_poly = Geometries.GeoPolygon(poly)
     geo_poly.set_crs("EPSG:3857")
+    
+    geo_poly.geometry = rotate(geo_poly.get_geometry(), angle=alpha, origin=(0, 0))
 
     polygon_list = Geometries.decompose_polygon(geo_poly.get_geometry(), obstacles=None)
     # Define the coordinates for the inner polygon
@@ -157,7 +165,6 @@ def custom_example():
     # multi_traj.set_crs("WGS84")
     # geo_poly.set_crs("WGS84")
     # hole.set_crs("WGS84")
-    geo_poly.plot(facecolor="grey", linewidth=2, alpha=0.4)
     
     #for decomposed_poly in polygon_list:
     #    d_poly = Geometries.GeoPolygon(decomposed_poly)
@@ -165,6 +172,10 @@ def custom_example():
     
     #hole.plot(facecolor="red", edgecolor="red", linewidth=2, alpha=0.2)
     multi_traj.concatenate_trajectories(geo_poly.get_geometry())
+
+    geo_poly.geometry = rotate(geo_poly.get_geometry(), angle=-alpha, origin=(0, 0))
+    geo_poly.plot(facecolor="grey", linewidth=2, alpha=0.4)
+    multi_traj.geometry = rotate(multi_traj.get_geometry(), angle=-alpha, origin=(0, 0))
     multi_traj.plot(color="black", linewidth=1)
     plt.axis("equal")
     plt.axis("off")
