@@ -171,7 +171,9 @@ def custom_example():
     #    d_poly.plot(facecolor="grey", edgecolor="green",linewidth=2, alpha=0.4)
     
     #hole.plot(facecolor="red", edgecolor="red", linewidth=2, alpha=0.2)
-    multi_traj.concatenate_trajectories(geo_poly.get_geometry())
+    multi_traj.concatenate_trajectories(geo_poly.get_geometry(), polygon_list, 
+            shapely.Point(-4433995.139441967, 6082232.280162263-100), 
+            shapely.Point(-4433995.139441967, 6082232.280162263-200))
 
     geo_poly.geometry = rotate(geo_poly.get_geometry(), angle=-alpha, origin=(0, 0))
     geo_poly.plot(facecolor="grey", linewidth=2, alpha=0.4)

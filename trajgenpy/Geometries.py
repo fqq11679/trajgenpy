@@ -88,6 +88,132 @@ class GeoTrajectory(GeoData):
         ]
         self.geometry = shapely.LineString(converted_coords)
 
+class DFSearcher:
+    def __init__(self, trajs, polygon, sub_polys):
+        self.trajs = trajs
+        self.polygon = polygon
+        self.sub_polys = sub_polys
+        self.visited = set()
+        self.final_path = []
+
+    def connect(self, polygon, point1, point2):
+        vertices = list(polygon.exterior.coords)[0:-1]
+        all_points = vertices + [point1, point2]
+
+        G = nx.Graph()
+
+        for i in range(len(all_points)):
+            for j in range(i+1, len(all_points)):
+                line = shapely.geometry.LineString([all_points[i], all_points[j]])
+                if polygon.buffer(0.001).contains(line):
+                    G.add_edge(i, j, weight=line.length)
+
+        point1_index = all_points.index(point1)
+        point2_index = all_points.index(point2)
+
+        path = nx.dijkstra_path(G, source=point1_index, target=point2_index, weight='weight')
+        path_length = nx.dijkstra_path_length(G, source=point1_index, target=point2_index, weight='weight')
+
+        inter_points = [all_points[i] for i in path]
+
+        return inter_points, path_length
+
+    def find_nearest_traj(self, start_point):
+        nearest_traj = None
+        nearest_distance = float('inf')
+        is_rev = None
+
+        for traj in self.trajs:
+            distance = start_point.distance(shapely.Point(list(traj.coords)[0]))
+            if distance < nearest_distance:
+                nearest_distance = distance
+                nearest_traj = traj
+                is_rev = 0
+
+            distance = start_point.distance(shapely.Point(list(traj.coords)[-1]))
+            if distance < nearest_distance:
+                nearest_distance = distance
+                nearest_traj = traj
+                is_rev = 1
+
+        return nearest_traj, is_rev
+
+    def dfs(self, current_traj, is_rev, start_point, end_point):
+        print(self.final_path)
+
+        # 标记当前几何形状为已访问
+        self.visited.add(current_traj)
+
+        # 获取当前几何的起终点
+        is_start = 0
+
+        if is_rev == 0:
+            head_point = list(current_traj.coords)[0]
+            tail_point = list(current_traj.coords)[-1]
+        else:
+            head_point = list(current_traj.coords)[-1]
+            tail_point = list(current_traj.coords)[0]            
+
+        # 添加连接路径
+        if self.final_path:
+            prev_point = self.final_path[-1]
+            path, _ = self.connect(self.polygon, prev_point, head_point)
+            self.final_path.extend(path)
+        else:
+            is_start = 1
+            self.final_path.append(start_point)  # 添加起始点
+
+        if is_rev == 0:
+            self.final_path.extend(list(current_traj.coords))
+        else:
+            self.final_path.extend(list(current_traj.coords)[::-1])
+
+        # 检查是否已访问所有几何形状
+        if len(self.visited) == len(self.trajs):
+            # 连接到终点
+            self.final_path.append(end_point)
+            return True # 已完成遍历
+
+
+        # 深度优先遍历相邻几何形状
+        for next_traj in self.trajs:
+            if next_traj not in self.visited:
+                # 检查相邻性
+                cur_inx = list(self.trajs).index(current_traj)
+                next_inx = list(self.trajs).index(next_traj)
+                if self.sub_polys[cur_inx].touches(self.sub_polys[next_inx]):  ## 可以根据需要使用其他相邻检查
+                    _, next_length0 = self.connect(self.polygon, tail_point, list(next_traj.coords)[0])
+                    _, next_length1 = self.connect(self.polygon, tail_point, list(next_traj.coords)[-1])
+                    if next_length0 < next_length1:
+                        if self.dfs(next_traj, 0, start_point, end_point):
+                            return True
+                    else:
+                        if self.dfs(next_traj, 1, start_point, end_point):
+                            return True
+
+        print('------------------------')
+
+        # 回溯：从当前几何形状回到起始点
+        if is_start == 0:
+            if is_rev == 0:
+                ret_path, _ = self.connect(self.polygon, tail_point, head_point)
+                self.final_path.extend(ret_path)
+                ret_path, _ = self.connect(self.polygon, head_point, prev_point)
+                self.final_path.extend(ret_path)
+            else:
+                ret_path, _ = self.connect(self.polygon, head_point, tail_point)
+                self.final_path.extend(ret_path)
+                ret_path, _ = self.connect(self.polygon, tail_point, prev_point)
+                self.final_path.extend(ret_path)
+
+        return False
+
+    def run(self, start_point, end_point):
+        nearest_traj, is_rev = self.find_nearest_traj(start_point)
+        if nearest_traj:
+            self.dfs(nearest_traj, is_rev, start_point, end_point)
+        return self.final_path
+
 
 class GeoMultiTrajectory(GeoData):
     def __init__(
@@ -116,116 +242,10 @@ class GeoMultiTrajectory(GeoData):
             self.is_geometry_of_type(geometry, shapely.MultiLineString)
             super().__init__(geometry, crs)
 
-    def connect(self, polygon, point1, point2):
-        vertices = list(polygon.exterior.coords)[0:-1]
-        all_points = vertices + [point1, point2]
-
-        G = nx.Graph()
-        
-        for i in range(len(all_points)):
-            for j in range(i+1, len(all_points)):
-                line = shapely.geometry.LineString([all_points[i], all_points[j]])
-                if polygon.buffer(0.001).contains(line):
-                    G.add_edge(i, j, weight=line.length)
-        
-        point1_index = all_points.index(point1)
-        point2_index = all_points.index(point2)
-        
-        path = nx.dijkstra_path(G, source=point1_index, target=point2_index, weight='weight')
-        inter_points = [all_points[i] for i in path]
-
-        return inter_points
-
-    def create_distance_matrix(self, geoms, polygon):
-        distance_matrix = []
-        for i in range(len(geoms)):
-            row = []
-            for j in range(len(geoms)):
-                if i == j:
-                    row.append([0, 0, 0, 0])  # 四种距离，均为0
-                else:
-                    # 计算四种距离
-                    distances = []
-                    for var1 in [0, 1]:  # 轨迹1的方向
-                        for var2 in [0, 1]:  # 轨迹2的方向
-                            if var1 == 0:
-                                path1 = list(geoms[i].coords)
-                            else:
-                                path1 = list(reversed(geoms[i].coords))
-
-                            if var2 == 0:
-                                path2 = list(geoms[j].coords)
-                            else:
-                                path2 = list(reversed(geoms[j].coords))
-
-                            # 连接路径并计算距离
-                            path = self.connect(polygon, path1[-1], path2[0])
-                            if len(path) < 2:
-                                distance = 0
-                            else:
-                                distance = shapely.geometry.LineString(path).length
-                            distances.append(distance)
-                    row.append(distances)
-            distance_matrix.append(row)
-        return distance_matrix
-
-    def tsp_solution(self, geoms, polygon):
-        distance_matrix = self.create_distance_matrix(geoms, polygon)
-        manager = pywrapcp.RoutingIndexManager(len(distance_matrix), 1, 0)
-        routing = pywrapcp.RoutingModel(manager)
-
-        var_indices = []
-        for i in range(len(geoms)):
-            var_indices.append(routing.RegisterUnaryTransitCallback(lambda index, i=i: 0 if index == i else 1))
-
-        def distance_callback(from_index, to_index):
-            from_var_value = var_indices[manager.IndexToNode(from_index)]
-            to_var_value = var_indices[manager.IndexToNode(to_index)]
-            return distance_matrix[manager.IndexToNode(from_index)][manager.IndexToNode(to_index)][from_var_value * 2 + to_var_value]
-
-        transit_callback_index = routing.RegisterTransitCallback(distance_callback)
-        routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
-
-        search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-        search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
-
-        solution = routing.SolveWithParameters(search_parameters)
-
-        if solution:
-            traj_list = []
-            index = routing.Start(0)
-            while not routing.IsEnd(index):
-                current_geom = geoms[manager.IndexToNode(index)]
-                coords = list(current_geom.coords)
-                var_value = var_indices[manager.IndexToNode(index)]
-                if var_value:
-                    coords = coords[::-1]
-                traj_list.extend(coords)
-
-                next_index = solution.Value(routing.NextVar(index))
-                if not routing.IsEnd(next_index):
-                    next_geom = geoms[manager.IndexToNode(next_index)]
-                    next_coords = list(next_geom.coords)
-                    next_var_value = var_indices[manager.IndexToNode(next_index)]
-                    if next_var_value:
-                        next_coords = next_coords[::-1]
-
-                    point1 = coords[-1]  # Last point of current geometry
-                    point2 = next_coords[0]  # First point of next geometry
-                    connecting_points = self.connect(polygon, point1, point2)
-                    traj_list.extend(connecting_points)
-
-                index = next_index
-
-            return shapely.geometry.LineString(traj_list)
-        else:
-            return None
-
-    # Example usage:
-    # result_geometry = tsp_solution(self.geometry.geoms, polygon)
-
-    def concatenate_trajectories(self, geo_poly):
-        self.geometry = self.tsp_solution(self.geometry.geoms, geo_poly)
+    def concatenate_trajectories(self, polygon, sub_polys, start_point, end_point):
+        searcher = DFSearcher(self.geometry.geoms, polygon, sub_polys)
+        searcher.run(start_point, end_point)
+        self.geometry = shapely.LineString(searcher.final_path)
 
     def plot(self, ax=None, add_points=False, color=None, linewidth=2, **kwargs):
         if self.crs == "WGS84":
