@@ -229,6 +229,9 @@ class DFSearcher:
             line = rotate(line, angle=-45, origin=(0, 0))
             x, y = line.xy
             plt.plot(x, y, linestyle='dashed', color='red', linewidth=2)
+            # 添加箭头
+            plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
+            angles='xy', scale_units='xy', scale=1, color='red')
 
         plt.show()
 
@@ -239,6 +242,9 @@ class DFSearcher:
             line = rotate(line, angle=-45, origin=(0, 0))
             x, y = line.xy
             plt.plot(x, y, linestyle='dashed', color='blue', linewidth=2)
+            # 添加箭头
+            plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
+            angles='xy', scale_units='xy', scale=1, color='blue')
 
         plt.show()
 
