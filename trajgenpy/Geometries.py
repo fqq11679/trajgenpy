@@ -147,6 +147,9 @@ class DFSearcher:
         # 获取当前几何的起终点
         is_start = 0
 
+        # 初始化 MultiLineString 用于回溯线
+        backtrack_lines = []
+
         if is_rev == 0:
             head_point = list(current_traj.coords)[0]
             tail_point = list(current_traj.coords)[-1]
@@ -195,18 +198,32 @@ class DFSearcher:
 
         # 回溯：从当前几何形状回到起始点
         if is_start == 0:
-            if is_rev == 0:
-                ret_path, _ = self.connect(self.polygon, tail_point, head_point)
-                self.final_path.extend(ret_path)
-                ret_path, _ = self.connect(self.polygon, head_point, prev_point)
-                self.final_path.extend(ret_path)
-            else:
-                ret_path, _ = self.connect(self.polygon, head_point, tail_point)
-                self.final_path.extend(ret_path)
-                ret_path, _ = self.connect(self.polygon, tail_point, prev_point)
-                self.final_path.extend(ret_path)
+            ret_path, _ = self.connect(self.polygon, tail_point, head_point)
+            self.final_path.extend(ret_path)
+            if len(ret_path) > 1:
+                backtrack_lines.append(shapely.LineString(ret_path))
+            ret_path, _ = self.connect(self.polygon, head_point, prev_point)
+            self.final_path.extend(ret_path)
+            if len(ret_path) > 1:
+                backtrack_lines.append(shapely.LineString(ret_path))
+
+
+        # 创建 MultiLineString 包含所有回溯线段
+        if backtrack_lines:
+            backtrack_multilines = shapely.MultiLineString(backtrack_lines)
+            #self.plot_multilines(backtrack_multilines)
 
         return False
+
+    def plot_multilines(self, multilines):
+        import matplotlib.pyplot as plt
+        from shapely.affinity import rotate
+        for line in multilines.geoms:
+            line = rotate(line, angle=-45, origin=(0, 0))
+            x, y = line.xy
+            plt.plot(x, y, linestyle='dashed', color='red', linewidth=2)
+
+        plt.show()
 
     def run(self, start_point, end_point):
         nearest_traj, is_rev = self.find_nearest_traj(start_point)
