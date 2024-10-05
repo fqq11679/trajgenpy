@@ -95,6 +95,8 @@ class DFSearcher:
         self.sub_polys = sub_polys
         self.visited = set()
         self.final_path = []
+        self.red_cnt = 0
+        self.blue_cnt = 0
 
     def connect(self, polygon, point1, point2):
         vertices = list(polygon.exterior.coords)[0:-1]
@@ -115,6 +117,9 @@ class DFSearcher:
         path_length = nx.dijkstra_path_length(G, source=point1_index, target=point2_index, weight='weight')
 
         inter_points = [all_points[i] for i in path]
+
+        if len(inter_points) > 2:
+            inter_points = [inter_points[0], inter_points[-1]]
 
         return inter_points, path_length
 
@@ -233,6 +238,13 @@ class DFSearcher:
             plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
             angles='xy', scale_units='xy', scale=1, color='red')
 
+            # 在箭头中间添加序号
+            self.red_cnt += 1
+            mid_x = (x[0] + x[-1]) / 2
+            mid_y = (y[0] + y[-1]) / 2
+            #plt.text(mid_x, mid_y, str(self.red_cnt), fontsize=12, ha='center', va='center', color='black')
+
+
         plt.show()
 
     def forward_plot_multilines(self, multilines):
@@ -245,6 +257,12 @@ class DFSearcher:
             # 添加箭头
             plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
             angles='xy', scale_units='xy', scale=1, color='blue')
+            # 在箭头中间添加序号
+            self.blue_cnt += 1
+            mid_x = (x[0] + x[-1]) / 2
+            mid_y = (y[0] + y[-1]) / 2
+            plt.text(mid_x, mid_y, str(self.blue_cnt), fontsize=12, ha='center', va='center', color='black')
+
 
         plt.show()
 
