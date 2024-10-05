@@ -149,6 +149,7 @@ class DFSearcher:
 
         # 初始化 MultiLineString 用于回溯线
         backtrack_lines = []
+        forward_lines = []
 
         if is_rev == 0:
             head_point = list(current_traj.coords)[0]
@@ -162,6 +163,8 @@ class DFSearcher:
             prev_point = self.final_path[-1]
             path, _ = self.connect(self.polygon, prev_point, head_point)
             self.final_path.extend(path)
+            if len(path) > 1:
+                forward_lines.append(shapely.LineString(path))
         else:
             is_start = 1
             self.final_path.append(start_point)  # 添加起始点
@@ -211,7 +214,11 @@ class DFSearcher:
         # 创建 MultiLineString 包含所有回溯线段
         if backtrack_lines:
             backtrack_multilines = shapely.MultiLineString(backtrack_lines)
-            #self.plot_multilines(backtrack_multilines)
+            self.plot_multilines(backtrack_multilines)
+
+        if forward_lines:
+            forward_multilines = shapely.MultiLineString(forward_lines)
+            self.forward_plot_multilines(forward_multilines)
 
         return False
 
@@ -222,6 +229,16 @@ class DFSearcher:
             line = rotate(line, angle=-45, origin=(0, 0))
             x, y = line.xy
             plt.plot(x, y, linestyle='dashed', color='red', linewidth=2)
+
+        plt.show()
+
+    def forward_plot_multilines(self, multilines):
+        import matplotlib.pyplot as plt
+        from shapely.affinity import rotate
+        for line in multilines.geoms:
+            line = rotate(line, angle=-45, origin=(0, 0))
+            x, y = line.xy
+            plt.plot(x, y, linestyle='dashed', color='blue', linewidth=2)
 
         plt.show()
 
