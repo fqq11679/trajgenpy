@@ -174,6 +174,10 @@ class DFSearcher:
         else:
             self.final_path.extend(list(current_traj.coords)[::-1])
 
+        if forward_lines:
+            forward_multilines = shapely.MultiLineString(forward_lines)
+            self.forward_plot_multilines(forward_multilines)
+
         # 检查是否已访问所有几何形状
         if len(self.visited) == len(self.trajs):
             # 连接到终点
@@ -215,10 +219,6 @@ class DFSearcher:
         if backtrack_lines:
             backtrack_multilines = shapely.MultiLineString(backtrack_lines)
             self.plot_multilines(backtrack_multilines)
-
-        if forward_lines:
-            forward_multilines = shapely.MultiLineString(forward_lines)
-            self.forward_plot_multilines(forward_multilines)
 
         return False
 
