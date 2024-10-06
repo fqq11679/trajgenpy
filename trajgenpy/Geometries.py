@@ -208,6 +208,17 @@ class DFSearcher:
         if forward_lines:
             forward_multilines = shapely.MultiLineString(forward_lines)
             self.forward_plot_multilines(forward_multilines)
+
+        import matplotlib.pyplot as plt
+        from shapely.affinity import rotate
+        for i in range(1, len(result)):
+            # 添加箭头
+            prev = shapely.Point(result[i-1])
+            cur = shapely.Point(result[i])
+            prev = rotate(prev, angle=-45, origin=(0, 0))
+            cur = rotate(cur, angle=-45, origin=(0, 0))
+            plt.quiver(prev.x, prev.y, cur.x - prev.x, cur.y - prev.y,
+            angles='xy', scale_units='xy', scale=1, color='black', width=0.003)
         return
 
     def forward_plot_multilines(self, multilines):
@@ -216,15 +227,15 @@ class DFSearcher:
         for line in multilines.geoms:
             line = rotate(line, angle=-45, origin=(0, 0))
             x, y = line.xy
-            plt.plot(x, y, linestyle='dashed', color='blue', linewidth=2)
+            plt.plot(x, y, linestyle='dashed', color='black', linewidth=1)
             # 添加箭头
-            plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
-            angles='xy', scale_units='xy', scale=1, color='blue')
+            #plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
+            #angles='xy', scale_units='xy', scale=1, color='blue')
             # 在箭头中间添加序号
             self.blue_cnt += 1
-            mid_x = (x[0] + x[-1]) / 2
-            mid_y = (y[0] + y[-1]) / 2
-            plt.text(mid_x, mid_y, str(self.blue_cnt), fontsize=12, ha='center', va='center', color='black')
+            tar_x = x[0]
+            tar_y = y[0]
+            plt.text(tar_x, tar_y, str(self.blue_cnt), fontsize=11, ha='center', va='center', color='blue')
 
         plt.show()
 
