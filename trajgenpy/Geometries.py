@@ -95,11 +95,8 @@ class DFSearcher:
         self.sub_polys = sub_polys
         self.visited = set()
         self.final_path = []
-        self.red_cnt = 0
         self.blue_cnt = 0
-
         self.traverse = []
-        self.traverse_path = []
 
     def connect(self, polygon, point1, point2):
         vertices = list(polygon.exterior.coords)[0:-1]
@@ -147,53 +144,19 @@ class DFSearcher:
         return nearest_traj, is_rev
 
     def dfs(self, current_traj, is_rev, start_point, end_point):
-        print(self.final_path)
-
         self.traverse.append([current_traj, is_rev])
 
         # 标记当前几何形状为已访问
         self.visited.add(current_traj)
 
-        # 获取当前几何的起终点
-        is_start = 0
-
-        # 初始化 MultiLineString 用于回溯线
-        backtrack_lines = []
-        forward_lines = []
-
         if is_rev == 0:
-            head_point = list(current_traj.coords)[0]
             tail_point = list(current_traj.coords)[-1]
         else:
-            head_point = list(current_traj.coords)[-1]
-            tail_point = list(current_traj.coords)[0]            
-
-        # 添加连接路径
-        if self.final_path:
-            prev_point = self.final_path[-1]
-            path, _ = self.connect(self.polygon, prev_point, head_point)
-            self.final_path.extend(path)
-            if len(path) > 1:
-                forward_lines.append(shapely.LineString(path))
-        else:
-            is_start = 1
-            self.final_path.append(start_point)  # 添加起始点
-
-        if is_rev == 0:
-            self.final_path.extend(list(current_traj.coords))
-        else:
-            self.final_path.extend(list(current_traj.coords)[::-1])
-
-        if forward_lines:
-            forward_multilines = shapely.MultiLineString(forward_lines)
-            #self.forward_plot_multilines(forward_multilines)
+            tail_point = list(current_traj.coords)[0]      
 
         # 检查是否已访问所有几何形状
         if len(self.visited) == len(self.trajs):
-            # 连接到终点
-            self.final_path.append(end_point)
             return True # 已完成遍历
-
 
         # 深度优先遍历相邻几何形状
         for next_traj in self.trajs:
@@ -210,25 +173,6 @@ class DFSearcher:
                     else:
                         if self.dfs(next_traj, 1, start_point, end_point):
                             return True
-
-        print('------------------------')
-
-        # 回溯：从当前几何形状回到起始点
-        if is_start == 0:
-            ret_path, _ = self.connect(self.polygon, tail_point, head_point)
-            self.final_path.extend(ret_path)
-            if len(ret_path) > 1:
-                backtrack_lines.append(shapely.LineString(ret_path))
-            ret_path, _ = self.connect(self.polygon, head_point, prev_point)
-            self.final_path.extend(ret_path)
-            if len(ret_path) > 1:
-                backtrack_lines.append(shapely.LineString(ret_path))
-
-
-        # 创建 MultiLineString 包含所有回溯线段
-        if backtrack_lines:
-            backtrack_multilines = shapely.MultiLineString(backtrack_lines)
-            #self.plot_multilines(backtrack_multilines)
 
         return False
 
@@ -266,27 +210,6 @@ class DFSearcher:
             self.forward_plot_multilines(forward_multilines)
         return
 
-
-    def plot_multilines(self, multilines):
-        import matplotlib.pyplot as plt
-        from shapely.affinity import rotate
-        for line in multilines.geoms:
-            line = rotate(line, angle=-45, origin=(0, 0))
-            x, y = line.xy
-            plt.plot(x, y, linestyle='dashed', color='red', linewidth=2)
-            # 添加箭头
-            plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
-            angles='xy', scale_units='xy', scale=1, color='red')
-
-            # 在箭头中间添加序号
-            self.red_cnt += 1
-            mid_x = (x[0] + x[-1]) / 2
-            mid_y = (y[0] + y[-1]) / 2
-            #plt.text(mid_x, mid_y, str(self.red_cnt), fontsize=12, ha='center', va='center', color='black')
-
-
-        plt.show()
-
     def forward_plot_multilines(self, multilines):
         import matplotlib.pyplot as plt
         from shapely.affinity import rotate
@@ -302,7 +225,6 @@ class DFSearcher:
             mid_x = (x[0] + x[-1]) / 2
             mid_y = (y[0] + y[-1]) / 2
             plt.text(mid_x, mid_y, str(self.blue_cnt), fontsize=12, ha='center', va='center', color='black')
-
 
         plt.show()
 
