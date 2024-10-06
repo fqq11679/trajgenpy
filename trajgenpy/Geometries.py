@@ -98,6 +98,9 @@ class DFSearcher:
         self.red_cnt = 0
         self.blue_cnt = 0
 
+        self.traverse = []
+        self.traverse_path = []
+
     def connect(self, polygon, point1, point2):
         vertices = list(polygon.exterior.coords)[0:-1]
         all_points = vertices + [point1, point2]
@@ -118,8 +121,8 @@ class DFSearcher:
 
         inter_points = [all_points[i] for i in path]
 
-        if len(inter_points) > 2:
-            inter_points = [inter_points[0], inter_points[-1]]
+        #if len(inter_points) > 2:
+        #    inter_points = [inter_points[0], inter_points[-1]]
 
         return inter_points, path_length
 
@@ -145,6 +148,8 @@ class DFSearcher:
 
     def dfs(self, current_traj, is_rev, start_point, end_point):
         print(self.final_path)
+
+        self.traverse.append([current_traj, is_rev])
 
         # 标记当前几何形状为已访问
         self.visited.add(current_traj)
@@ -181,7 +186,7 @@ class DFSearcher:
 
         if forward_lines:
             forward_multilines = shapely.MultiLineString(forward_lines)
-            self.forward_plot_multilines(forward_multilines)
+            #self.forward_plot_multilines(forward_multilines)
 
         # 检查是否已访问所有几何形状
         if len(self.visited) == len(self.trajs):
@@ -223,9 +228,44 @@ class DFSearcher:
         # 创建 MultiLineString 包含所有回溯线段
         if backtrack_lines:
             backtrack_multilines = shapely.MultiLineString(backtrack_lines)
-            self.plot_multilines(backtrack_multilines)
+            #self.plot_multilines(backtrack_multilines)
 
         return False
+
+    def concate_travers(self, start_point, end_point):
+        forward_lines = []
+
+        result = []
+        result.append(start_point)
+        for i in range(len(self.traverse)):
+            traj, is_rev = self.traverse[i]
+            if is_rev == 0:
+                head_cur = list(traj.coords)[0]
+            else:
+                head_cur = list(traj.coords)[-1]
+            if i > 0:
+                prev_traj, prev_is_rev = self.traverse[i-1]
+                if prev_is_rev == 0:
+                    tail_prev = list(prev_traj.coords)[-1]
+                else:
+                    tail_prev = list(prev_traj.coords)[0] 
+                path, _ = self.connect(self.polygon, tail_prev, head_cur)
+                result.extend(path)
+                if len(path) > 1:
+                    forward_lines.append(shapely.LineString(path))
+
+            if is_rev == 0:
+                result.extend(list(traj.coords))
+            else:
+                result.extend(list(traj.coords)[::-1])
+        result.append(end_point)
+        self.final_path = result
+
+        if forward_lines:
+            forward_multilines = shapely.MultiLineString(forward_lines)
+            self.forward_plot_multilines(forward_multilines)
+        return
+
 
     def plot_multilines(self, multilines):
         import matplotlib.pyplot as plt
@@ -270,7 +310,9 @@ class DFSearcher:
         nearest_traj, is_rev = self.find_nearest_traj(start_point)
         if nearest_traj:
             self.dfs(nearest_traj, is_rev, start_point, end_point)
-        return self.final_path
+        print(self.traverse)
+        self.concate_travers(start_point, end_point)
+        return
 
 
 class GeoMultiTrajectory(GeoData):
