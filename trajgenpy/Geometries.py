@@ -14,6 +14,11 @@ import networkx as nx
 
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
+import matplotlib.pyplot as plt
+from shapely.affinity import rotate
+from matplotlib.animation import FuncAnimation
+
+
 log = Logging.get_logger()
 
 
@@ -98,6 +103,8 @@ class DFSearcher:
         self.blue_cnt = 0
         self.traverse = []
 
+        self.is_rev = None
+
     def connect(self, polygon, point1, point2):
         vertices = list(polygon.exterior.coords)[0:-1]
         all_points = vertices + [point1, point2]
@@ -126,107 +133,150 @@ class DFSearcher:
     def find_nearest_traj(self, start_point):
         nearest_traj = None
         nearest_distance = float('inf')
-        is_rev = None
 
         for traj in self.trajs:
-            distance = start_point.distance(shapely.Point(list(traj.coords)[0]))
-            if distance < nearest_distance:
-                nearest_distance = distance
+            # 计算起点到轨迹首点的距离
+            distance_start = start_point.distance(shapely.Point(list(traj.coords)[0]))
+            # 计算起点到轨迹末点的距离
+            distance_end = start_point.distance(shapely.Point(list(traj.coords)[-1]))
+
+            # 选择最近的轨迹
+            if distance_start < nearest_distance:
+                nearest_distance = distance_start
                 nearest_traj = traj
-                is_rev = 0
+                self.is_rev = 0
 
-            distance = start_point.distance(shapely.Point(list(traj.coords)[-1]))
-            if distance < nearest_distance:
-                nearest_distance = distance
+            if distance_end < nearest_distance:
+                nearest_distance = distance_end
                 nearest_traj = traj
-                is_rev = 1
+                self.is_rev = 1
 
-        return nearest_traj, is_rev
+        return nearest_traj
 
-    def dfs(self, current_traj, is_rev, start_point, end_point):
-        self.traverse.append([current_traj, is_rev])
+    def angle_from_point(self, base_point, point):
+        """计算相对于base_point的角度"""
+        dx = point.x - base_point.x
+        dy = point.y - base_point.y
+        return math.atan2(dy, dx)  # 返回弧度，逆时针计算
+
+    def traj_center(self, traj):
+        """计算轨迹的中心点"""
+        coords = list(traj.coords)
+        x_coords, y_coords = zip(*coords)
+        return shapely.geometry.Point(sum(x_coords)/len(x_coords), sum(y_coords)/len(y_coords))
+
+    def dfs(self, current_traj, start_point, end_point):
+        self.traverse.append(current_traj)
+        print(list(self.trajs).index(current_traj))
 
         # 标记当前几何形状为已访问
         self.visited.add(current_traj)
-
-        if is_rev == 0:
-            tail_point = list(current_traj.coords)[-1]
-        else:
-            tail_point = list(current_traj.coords)[0]      
 
         # 检查是否已访问所有几何形状
         if len(self.visited) == len(self.trajs):
             return True # 已完成遍历
 
-        # 深度优先遍历相邻几何形状
+        # 获取当前轨迹的中心
+        current_center = self.traj_center(current_traj)
+
+        # 计算所有相邻轨迹，并按照相对于current_center的逆时针顺序排序
+        neighbors = []
         for next_traj in self.trajs:
+            cur_inx = list(self.trajs).index(current_traj)
+            next_inx = list(self.trajs).index(next_traj)
+            if self.sub_polys[cur_inx].touches(self.sub_polys[next_inx]):
+                next_center = self.traj_center(next_traj)
+                angle = self.angle_from_point(current_center, next_center)
+                neighbors.append((next_traj, angle))
+
+        # 按逆时针顺序排序相邻轨迹（按角度从小到大排序）
+        neighbors.sort(key=lambda x: x[1])
+
+        # 深度优先遍历按逆时针顺序排序后的相邻几何形状
+        for next_traj, _ in neighbors:
             if next_traj not in self.visited:
-                # 检查相邻性
-                cur_inx = list(self.trajs).index(current_traj)
-                next_inx = list(self.trajs).index(next_traj)
-                if self.sub_polys[cur_inx].touches(self.sub_polys[next_inx]):  ## 可以根据需要使用其他相邻检查
-                    _, next_length0 = self.connect(self.polygon, tail_point, list(next_traj.coords)[0])
-                    _, next_length1 = self.connect(self.polygon, tail_point, list(next_traj.coords)[-1])
-                    if next_length0 < next_length1:
-                        if self.dfs(next_traj, 0, start_point, end_point):
-                            return True
-                    else:
-                        if self.dfs(next_traj, 1, start_point, end_point):
-                            return True
+                if self.dfs(next_traj, start_point, end_point):
+                    return True
 
         return False
 
     def animate_arrow(self, result):
-        import matplotlib.pyplot as plt
-        from shapely.affinity import rotate
-        from matplotlib.animation import FuncAnimation
-   
+        fig, ax = plt.subplots()
+
         def update(frame):
-            # 获取当前和前一个点的坐标
-            prev = shapely.Point(result[frame - 1])
-            cur = shapely.Point(result[frame])
-        
-            # 旋转点，保持与原代码一致
-            prev = rotate(prev, angle=-45, origin=(0, 0))
-            cur = rotate(cur, angle=-45, origin=(0, 0))
-        
-            # 更新箭头的位置
-            plt.quiver(prev.x, prev.y, cur.x - prev.x, cur.y - prev.y,
-                      angles='xy', scale_units='xy', scale=1, color='black', width=0.003)
+            ax.clear()
+
+            # 绘制之前所有的箭头
+            for i in range(1, frame + 1):
+                prev = shapely.Point(result[i - 1])
+                cur = shapely.Point(result[i])
+
+                prev = rotate(prev, angle=-45, origin=(0, 0))
+                cur = rotate(cur, angle=-45, origin=(0, 0))
+    
+                ax.quiver(prev.x, prev.y, cur.x - prev.x, cur.y - prev.y,
+                          angles='xy', scale_units='xy', scale=1, color='black', width=0.003)
 
         # 创建动画，使用update函数逐帧更新
-        anim = FuncAnimation(plt.gcf(), update, frames=range(1, len(result)), interval=500)  # 500ms间隔
+        anim = FuncAnimation(fig, update, frames=range(1, len(result)), interval=200)  # 500ms间隔
 
         # 保存动画为gif
-        anim.save('arrows_animation.gif', writer='imagemagick')
+        from matplotlib.animation import PillowWriter
+        anim.save('arrows_animation.gif', writer=PillowWriter(fps=2))
 
+        #anim.save('arrows_animation.gif', writer='imagemagick')
 
     def concate_travers(self, start_point, end_point):
         forward_lines = []
-
         result = []
-        result.append(start_point)
+        result.append(start_point)  # 添加起点
+        print(len(self.trajs))
         for i in range(len(self.traverse)):
-            traj, is_rev = self.traverse[i]
-            if is_rev == 0:
-                head_cur = list(traj.coords)[0]
-            else:
-                head_cur = list(traj.coords)[-1]
+            traj = self.traverse[i]
             if i > 0:
-                prev_traj, prev_is_rev = self.traverse[i-1]
-                if prev_is_rev == 0:
-                    tail_prev = list(prev_traj.coords)[-1]
-                else:
-                    tail_prev = list(prev_traj.coords)[0] 
-                path, _ = self.connect(self.polygon, tail_prev, head_cur)
-                result.extend(path)
-                if len(path) > 1:
-                    forward_lines.append(shapely.LineString(path))
+                prev_traj = self.traverse[i-1]
+                prev_is_rev = self.is_rev
+                min_dist = None
+                best_path = None
+                best_is_rev = None
+                for cur_is_rev in range(2):
+                    # 获取上一轨迹的尾部和当前轨迹的头部
+                    if prev_is_rev == 0:
+                        tail_prev = list(prev_traj.coords)[-1]  # 上一个轨迹的尾部
+                    else:
+                        tail_prev = list(prev_traj.coords)[0]   # 上一个轨迹的头部
 
-            if is_rev == 0:
-                result.extend(list(traj.coords))
+                    if cur_is_rev == 0:
+                        head_cur = list(traj.coords)[0]         # 当前轨迹的头部
+                    else:
+                        head_cur = list(traj.coords)[-1]        # 当前轨迹的尾部
+
+                    path, length = self.connect(self.polygon, tail_prev, head_cur)
+
+                    # 比较路径长度，选择更短的路径
+                    if min_dist == None or length < min_dist:
+                        min_dist = length
+                        best_path = path
+                        best_is_rev = cur_is_rev
+
+                result.extend(best_path)
+
+                if best_is_rev == 0:
+                    result.extend(list(traj.coords))  # 正序加入轨迹
+                else:
+                    result.extend(list(traj.coords)[::-1])  
+                
+                if len(best_path) > 1:
+                    forward_lines.append(shapely.LineString(best_path))
+
+                self.is_rev = best_is_rev
             else:
-                result.extend(list(traj.coords)[::-1])
+                if self.is_rev == 0:
+                    result.extend(list(traj.coords))
+                else:
+                    result.extend(list(traj.coords)[::-1])
+
+        # 添加终点连接
         result.append(end_point)
         self.final_path = result
 
@@ -236,8 +286,6 @@ class DFSearcher:
             forward_multilines = shapely.MultiLineString(forward_lines)
             self.forward_plot_multilines(forward_multilines)
 
-        import matplotlib.pyplot as plt
-        from shapely.affinity import rotate
         for i in range(1, len(result)):
             # 添加箭头
             prev = shapely.Point(result[i-1])
@@ -246,19 +294,14 @@ class DFSearcher:
             cur = rotate(cur, angle=-45, origin=(0, 0))
             plt.quiver(prev.x, prev.y, cur.x - prev.x, cur.y - prev.y,
             angles='xy', scale_units='xy', scale=1, color='black', width=0.003)
+
         return
 
     def forward_plot_multilines(self, multilines):
-        import matplotlib.pyplot as plt
-        from shapely.affinity import rotate
         for line in multilines.geoms:
             line = rotate(line, angle=-45, origin=(0, 0))
             x, y = line.xy
             plt.plot(x, y, linestyle='dashed', color='black', linewidth=1)
-            # 添加箭头
-            #plt.quiver(x[-2], y[-2], x[-1] - x[-2], y[-1] - y[-2],
-            #angles='xy', scale_units='xy', scale=1, color='blue')
-            # 在箭头中间添加序号
             self.blue_cnt += 1
             tar_x = x[0]
             tar_y = y[0]
@@ -267,9 +310,9 @@ class DFSearcher:
         plt.show()
 
     def run(self, start_point, end_point):
-        nearest_traj, is_rev = self.find_nearest_traj(start_point)
+        nearest_traj = self.find_nearest_traj(start_point)
         if nearest_traj:
-            self.dfs(nearest_traj, is_rev, start_point, end_point)
+            self.dfs(nearest_traj, start_point, end_point)
         print(self.traverse)
         self.concate_travers(start_point, end_point)
         return
