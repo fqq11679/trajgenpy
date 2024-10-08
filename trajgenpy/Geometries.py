@@ -176,6 +176,31 @@ class DFSearcher:
 
         return False
 
+    def animate_arrow(self, result):
+        import matplotlib.pyplot as plt
+        from shapely.affinity import rotate
+        from matplotlib.animation import FuncAnimation
+   
+        def update(frame):
+            # 获取当前和前一个点的坐标
+            prev = shapely.Point(result[frame - 1])
+            cur = shapely.Point(result[frame])
+        
+            # 旋转点，保持与原代码一致
+            prev = rotate(prev, angle=-45, origin=(0, 0))
+            cur = rotate(cur, angle=-45, origin=(0, 0))
+        
+            # 更新箭头的位置
+            plt.quiver(prev.x, prev.y, cur.x - prev.x, cur.y - prev.y,
+                      angles='xy', scale_units='xy', scale=1, color='black', width=0.003)
+
+        # 创建动画，使用update函数逐帧更新
+        anim = FuncAnimation(plt.gcf(), update, frames=range(1, len(result)), interval=500)  # 500ms间隔
+
+        # 保存动画为gif
+        anim.save('arrows_animation.gif', writer='imagemagick')
+
+
     def concate_travers(self, start_point, end_point):
         forward_lines = []
 
@@ -204,6 +229,8 @@ class DFSearcher:
                 result.extend(list(traj.coords)[::-1])
         result.append(end_point)
         self.final_path = result
+
+        self.animate_arrow(result)
 
         if forward_lines:
             forward_multilines = shapely.MultiLineString(forward_lines)
